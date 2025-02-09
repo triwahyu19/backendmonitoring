@@ -66,7 +66,7 @@ function authenticate(req, res, next) {
 
 // 1. Register
 app.post('/auth/register', async (req, res) => {
-    const { username, email, no_telp, password } = req.body;
+    const { username, email, no_telp, password, umuribu, alamatlengkap } = req.body;
 
     try {
         // Cek apakah email sudah terdaftar
@@ -76,16 +76,20 @@ app.post('/auth/register', async (req, res) => {
         }
 
         const hashedPassword = await bcrypt.hash(password, 10); // Hash the password
-        const sql = 'INSERT INTO "user" (username, email, no_telp, password) VALUES ($1, $2, $3, $4) RETURNING *';
-        const result = await db.query(sql, [username, email, no_telp, hashedPassword]);
+        const sql = 'INSERT INTO "user" (username, email, no_telp, password, umuribu, alamatlengkap) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *';
+        const result = await db.query(sql, [username, email, no_telp, hashedPassword, umuribu, alamatlengkap]);
         
+
         res.status(201).json({ 
             message: 'User registered successfully',
             user: {
                 username: result.rows[0].username,
-                email: result.rows[0].email
+                email: result.rows[0].email,
+                umuribu: result.rows[0].umuribu,
+                alamatlengkap: result.rows[0].alamatlengkap
             }
         });
+
     } catch (err) {
         console.error('Error registering user:', err);
         res.status(500).json({ 
@@ -143,29 +147,166 @@ app.post('/auth/login', async (req, res) => {
 });
 
 // 3. Add Alat
+// app.post('/alat/add-alat', authenticate, async (req, res) => {
+//     const { nama_anak, usia, jeniskelamin, idalat, tanggalLahir, beratBadan, tinggiBadan, tanganKananLebar, tanganKananPanjang, kakiKananLebar, kakiKananPanjang, lebarLangkah } = req.body;
+//     const username = req.user.username;
+
+//     try {
+//         // Cek apakah idalat sudah terdaftar
+//         const checkAlat = await db.query('SELECT * FROM dataalat WHERE idalat = $1', [idalat]);
+//         if (checkAlat.rows.length > 0) {
+//             return res.status(400).json({ error: 'ID Alat already registered' });
+//         }
+
+//         // Gunakan double quotes untuk nama kolom yang menggunakan camelCase
+//         const sql = `
+//             INSERT INTO dataalat (
+//                 username, 
+//                 nama_anak, 
+//                 usia, 
+//                 jeniskelamin, 
+//                 idalat, 
+//                 tanggalLahir, 
+//                 "beratBadan", 
+//                 "tinggiBadan", 
+//                 "tanganKananLebar", 
+//                 "tanganKananPanjang", 
+//                 "kakiKananLebar", 
+//                 "kakiKananPanjang", 
+//                 "lebarLangkah"
+//             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING *`;
+            
+//         const result = await db.query(sql, [
+//             username, 
+//             nama_anak, 
+//             usia, 
+//             jeniskelamin, 
+//             idalat, 
+//             tanggalLahir, 
+//             beratBadan, 
+//             tinggiBadan, 
+//             tanganKananLebar, 
+//             tanganKananPanjang, 
+//             kakiKananLebar, 
+//             kakiKananPanjang, 
+//             lebarLangkah
+//         ]);
+
+//         res.status(201).json({ 
+//             message: 'Alat added successfully',
+//             data: result.rows[0]
+//         });
+//     } catch (err) {
+//         console.error('Error adding alat:', err);
+//         res.status(500).json({ 
+//             error: 'Error adding alat', 
+//             details: err.message 
+//         });
+//     }
+// });
+
 app.post('/alat/add-alat', authenticate, async (req, res) => {
-    const { nama_anak, usia, jeniskelamin, idalat } = req.body;
-    const username = req.user.username; // Logged-in user's username
+    const { 
+        nama_anak, 
+        usia, 
+        jeniskelamin, 
+        idalat, 
+        tanggalLahir, // pastikan nama field sesuai
+        beratBadan, 
+        tinggiBadan, 
+        tanganKananLebar, 
+        tanganKananPanjang, 
+        kakiKananLebar, 
+        kakiKananPanjang, 
+        lebarLangkah 
+    } = req.body;
+    const username = req.user.username;
 
     try {
-        // Cek apakah idalat sudah terdaftar
-        const checkAlat = await db.query('SELECT * FROM dataalat WHERE idalat = $1', [idalat]);
-        if (checkAlat.rows.length > 0) {
-            return res.status(400).json({ error: 'ID Alat already registered' });
+        // Validasi input
+        if (!nama_anak || !usia || !jeniskelamin || !idalat || !tanggalLahir) {
+            return res.status(400).json({ 
+                error: 'Semua field wajib diisi',
+                details: {
+                    nama_anak: !nama_anak ? 'Nama anak harus diisi' : null,
+                    usia: !usia ? 'Usia harus diisi' : null,
+                    jeniskelamin: !jeniskelamin ? 'Jenis kelamin harus diisi' : null,
+                    idalat: !idalat ? 'ID Alat harus diisi' : null,
+                    tanggalLahir: !tanggalLahir ? 'Tanggal lahir harus diisi' : null
+                }
+            });
         }
 
-        const sql = 'INSERT INTO dataalat (username, nama_anak, usia, jeniskelamin, idalat) VALUES ($1, $2, $3, $4, $5) RETURNING *';
-        const result = await db.query(sql, [username, nama_anak, usia, jeniskelamin, idalat]);
-        
+        // Validasi format tanggal
+        const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+        if (!dateRegex.test(tanggalLahir)) {
+            return res.status(400).json({ 
+                error: 'Format tanggal lahir tidak valid. Gunakan format YYYY-MM-DD' 
+            });
+        }
+
+        // Konversi tanggal
+        const formattedTanggalLahir = new Date(tanggalLahir);
+        if (isNaN(formattedTanggalLahir.getTime())) {
+            return res.status(400).json({ 
+                error: 'Tanggal lahir tidak valid' 
+            });
+        }
+
+        // Cek ID Alat
+        const checkAlat = await db.query('SELECT * FROM dataalat WHERE idalat = $1', [idalat]);
+        if (checkAlat.rows.length > 0) {
+            return res.status(400).json({ 
+                error: 'ID Alat sudah terdaftar' 
+            });
+        }
+
+        const sql = `
+            INSERT INTO dataalat (
+                username, 
+                nama_anak, 
+                usia, 
+                jeniskelamin, 
+                idalat, 
+                "tanggalLahir", 
+                "beratBadan", 
+                "tinggiBadan", 
+                "tanganKananLebar", 
+                "tanganKananPanjang", 
+                "kakiKananLebar", 
+                "kakiKananPanjang", 
+                "lebarLangkah",
+                created_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, CURRENT_TIMESTAMP) 
+            RETURNING *`;
+            
+        const result = await db.query(sql, [
+            username, 
+            nama_anak, 
+            usia, 
+            jeniskelamin, 
+            idalat, 
+            formattedTanggalLahir.toISOString(), 
+            beratBadan || 0, 
+            tinggiBadan || 0, 
+            tanganKananLebar || 0, 
+            tanganKananPanjang || 0, 
+            kakiKananLebar || 0, 
+            kakiKananPanjang || 0, 
+            lebarLangkah || 0
+        ]);
+
         res.status(201).json({ 
-            message: 'Alat added successfully',
+            status: 'success',
+            message: 'Data anak berhasil ditambahkan',
             data: result.rows[0]
         });
     } catch (err) {
         console.error('Error adding alat:', err);
         res.status(500).json({ 
-            error: 'Error adding alat', 
-            details: err.message 
+            status: 'error',
+            message: 'Gagal menambahkan data anak',
+            error: err.message 
         });
     }
 });
@@ -275,6 +416,112 @@ app.get('/history/:idalat', async (req, res) => {
     } catch (err) {
         console.error('Error fetching history:', err);
         res.status(500).json({ error: 'Error fetching history', details: err.message });
+    }
+});
+
+// Endpoint untuk menampilkan seluruh data user
+app.get('/users', authenticate, async (req, res) => {
+    try {
+        const sql = 'SELECT username, email, no_telp, umuribu, alamatlengkap FROM "user"';
+        const result = await db.query(sql);
+        
+        if (result.rows.length === 0) {
+            return res.status(404).json({ message: 'Tidak ada data pengguna' });
+        }
+
+        res.json({ 
+            message: 'Data pengguna berhasil diambil',
+            users: result.rows 
+        });
+    } catch (err) {
+        console.error('Error mengambil data pengguna:', err);
+        res.status(500).json({ 
+            error: 'Error mengambil data pengguna', 
+            details: err.message 
+        });
+    }
+});
+
+// Endpoint untuk mendapatkan detail user/ibu
+app.get('/users/detail/:username', authenticate, async (req, res) => {
+    const { username } = req.params;
+
+    try {
+        const sql = `
+            SELECT 
+                "user".username,
+                "user".email,
+                "user".umuribu,
+                "user".alamatlengkap,
+                "user".no_telp
+            FROM "user" 
+            WHERE "user".username = $1`;
+            
+        const result = await db.query(sql, [username]);
+        
+        if (result.rows.length === 0) {
+            return res.status(404).json({ 
+                message: 'Data user tidak ditemukan' 
+            });
+        }
+
+        res.json({ 
+            status: 'success',
+            user: result.rows[0]
+        });
+    } catch (err) {
+        console.error('Error mengambil detail user:', err);
+        res.status(500).json({ 
+            status: 'error',
+            message: 'Error mengambil detail user',
+            details: err.message
+        });
+    }
+});
+
+// Endpoint untuk mendapatkan detail data anak
+app.get('/alat/detail/:username/:nama_anak', authenticate, async (req, res) => {
+    const { username, nama_anak } = req.params;
+
+    try {
+        const sql = `
+            SELECT 
+                nama_anak,
+                jeniskelamin,
+                TO_CHAR("tanggalLahir", 'DD-MM-YYYY') as "tanggalLahir",
+                usia,
+                "beratBadan",
+                "tinggiBadan",
+                "tanganKananLebar",
+                "tanganKananPanjang",
+                "kakiKananLebar",
+                "kakiKananPanjang",
+                "lebarLangkah"
+            FROM dataalat 
+            WHERE username = $1 AND LOWER(nama_anak) = LOWER($2)
+            ORDER BY created_at DESC
+            LIMIT 1`;
+            
+        const result = await db.query(sql, [username, nama_anak]);
+        
+        if (result.rows.length === 0) {
+            return res.status(404).json({ 
+                status: 'error',
+                message: 'Data anak tidak ditemukan' 
+            });
+        }
+
+        res.json({ 
+            status: 'success',
+            data: result.rows[0]
+        });
+    } catch (err) {
+        console.error('Error mengambil detail anak:', err);
+        res.status(500).json({ 
+            status: 'error',
+            message: 'Error mengambil detail anak',
+            error: err.message
+        });
     }
 });
 
